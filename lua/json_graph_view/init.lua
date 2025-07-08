@@ -4,7 +4,7 @@ local M = {
     expanded = {
     },
     config = {
-        accept_all_files = true,
+        accept_all_files = false,
         max_lines = 5,
         keymaps = {
             expand = "E",
