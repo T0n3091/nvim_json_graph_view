@@ -5,6 +5,8 @@ local M = {
     config = {
         accept_all_files = true,
         max_lines = 5,
+        round_units = true,
+        round_connections = true,
         keymaps = {
             expand = "E",
             link_forward = "L",
@@ -17,7 +19,7 @@ local M = {
     plugin_name = "JsonGraphView"
 }
 
-local EDGE = {
+local ROUND_EDGE = {
     TOP_LEFT = "┬",
     TOP_LEFT_ROOT = "╭",
     TOP_RIGHT = "╮",
@@ -30,7 +32,22 @@ local EDGE = {
     CONNECTION = "├"
 }
 
-local LINE = {
+local HARD_EDGE = {
+    TOP_LEFT = "┬",
+    TOP_LEFT_ROOT = "┌",
+    TOP_RIGHT = "┐",
+    BOTTOM_LEFT = "└",
+    BOTTOM_RIGHT = "┘",
+    TOP_AND_BOTTOM = "─",
+    LEFT_AND_RIGHT = "│",
+    TOP_SPLITTER = "┬",
+    BOTTOM_SPLITTER = "┴",
+    CONNECTION = "├"
+}
+
+local EDGE = HARD_EDGE
+
+local ROUND_LINE = {
     TURN_SIDE_FU = "╭",
     TURN_DOWN = "╮",
     TURN_SIDE_FD = "╰",
@@ -39,6 +56,18 @@ local LINE = {
     CROSS = "┼",
     UP_DOWN = "│",
 }
+
+local HARD_LINE = {
+    TURN_SIDE_FU = "┌",
+    TURN_DOWN = "┐",
+    TURN_SIDE_FD = "└",
+    TURN_UP = "┘",
+    SIDE = "─",
+    CROSS = "┼",
+    UP_DOWN = "│",
+}
+
+local LINE = HARD_LINE
 
 local function utf8len(str)
     local _, count = string.gsub(str, "[^\128-\191]", "")
@@ -796,6 +825,18 @@ end
 
 M.setup = function(opts)
     update_table(opts, M.config)
+
+    if M.config.round_connections then
+        LINE = ROUND_LINE
+    else
+        LINE = HARD_LINE
+    end
+
+    if M.config.round_units then
+        EDGE = ROUND_EDGE
+    else
+        EDGE = HARD_EDGE
+    end
 end
 
 return M
