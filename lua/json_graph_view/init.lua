@@ -3,13 +3,14 @@
 local M = {
     expanded = {},
     config = {
-        accept_all_files = false,
+        accept_all_files = true,
         max_lines = 5,
         keymaps = {
             expand = "E",
             link_forward = "L",
             link_backward = "B",
             set_as_root = "R",
+            quick_action = "<CR>",
         }
     },
     render_info = {},
@@ -132,6 +133,7 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                     M.config.keymaps.set_as_root,
                     function(opts)
                         M.RenderGraph(json_obj, opts.editor_buf, key_set)
+                        M.CursorToRoot()
                     end
                 }
             }
@@ -245,7 +247,6 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                     {
                         M.config.keymaps.expand,
                         function(opts)
-                            vim.print(key_set)
                             M.SetExpanded(key_set, true)
                             M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
                         end
@@ -261,7 +262,6 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                 collapse_callback = {
                     M.config.keymaps.expand,
                     function(opts)
-                        vim.print(key_set)
                         M.SetExpanded(key_set, false)
                         M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
                     end
@@ -677,16 +677,12 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
         end, { buffer = true })
     end
 
-    local callback_keys = ""
+    local callback_keys = {}
     for start, callback_set in pairs(M.render_info[editor_buf].line_callbacks[pos[1] - 1]) do
         if pos[2] >= start then
             for _, callback in pairs(callback_set) do
                 if pos[2] < start + callback.limit then
-                    callback_keys = callback_keys .. callback[1]
-
-
-
-                    vim.keymap.set("n", callback[1], function()
+                    local fn = function()
                         callback[2]({
                             editor_buf = editor_buf,
                             json_obj = json_obj,
@@ -694,13 +690,48 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
                             file_buf = file_buf,
                             render_info = M.render_info[editor_buf],
                         })
-                    end, { buffer = true })
+                    end
+
+                    callback_keys[callback[1]] = fn
+                    vim.keymap.set("n", callback[1], fn, { buffer = true })
                 end
             end
         end
     end
 
-    update_statusline(M.plugin_name .. " [" .. callback_keys .. "]")
+    local enter_map
+    for _, k in pairs({
+        M.config.keymaps.expand,
+        M.config.keymaps.link_backward,
+        M.config.keymaps.link_forward,
+        M.config.keymaps.set_as_root,
+    }) do
+        for k2, callback in pairs(callback_keys) do
+            if k == k2 then
+                enter_map = { k2, callback }
+                goto after
+            end
+        end
+    end
+    ::after::
+
+    local callback_keys_str = ""
+    for k, _ in pairs(callback_keys) do
+        callback_keys_str = callback_keys_str .. k
+    end
+
+    local statusline_text = M.plugin_name .. " [" .. callback_keys_str .. "]"
+
+    if enter_map then
+        vim.keymap.set("n", M.config.keymaps.quick_action, enter_map[2], { buffer = true })
+        statusline_text = statusline_text .. " " .. M.config.keymaps.quick_action .. "=" .. enter_map[1]
+    else
+        vim.keymap.set("n", M.config.keymaps.quick_action, function()
+            vim.notify(M.config.keymaps.quick_action .. " is not valid at this location", "WARN")
+        end, { buffer = true })
+    end
+
+    update_statusline(statusline_text)
 end
 
 M.CursorToRoot = function()
@@ -709,7 +740,6 @@ end
 
 M.ShowJsonWindow = function(file_buf, json_obj, file)
     local editor_buf, update_statusline = M.SplitView();
-    update_statusline("True")
     vim.api.nvim_win_set_buf(0, editor_buf)
     M.RenderGraph(json_obj, editor_buf, { editor_buf })
     M.CursorToRoot()
