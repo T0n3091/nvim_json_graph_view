@@ -1,8 +1,7 @@
 ---@diagnostic disable: undefined-global
 
 local M = {
-    expanded = {
-    },
+    expanded = {},
     config = {
         accept_all_files = false,
         max_lines = 5,
@@ -10,6 +9,7 @@ local M = {
             expand = "E",
             link_forward = "L",
             link_backward = "B",
+            set_as_root = "R",
         }
     },
     render_info = {},
@@ -53,6 +53,17 @@ local function escape_string(str)
         :gsub("\"", "\\\"")
 end
 
+local function appended_table(tbl, add)
+    local new = {}
+
+    for k, v in pairs(tbl) do
+        new[k] = v
+    end
+
+    new[#new + 1] = add
+
+    return new
+end
 
 M.GetValAsString = function(val)
     if val == vim.NIL then
@@ -92,7 +103,7 @@ M.GetLenOfValue = function(val)
     end
 end
 
-M.BuildBoxCap = function(top, max_len_left, first, origin)
+M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
     local left
     local right
     local splitter
@@ -101,11 +112,29 @@ M.BuildBoxCap = function(top, max_len_left, first, origin)
     if top then
         if first then
             left = EDGE.TOP_LEFT_ROOT
+            callbacks = { {
+                M.config.keymaps.link_backward,
+                function(opts)
+                    M.RenderGraph(opts.json_obj, opts.editor_buf, { opts.editor_buf })
+                    M.CursorToRoot()
+                end
+            } }
         else
             left = EDGE.TOP_LEFT
-            callbacks = { { M.config.keymaps.link_backward, function(opts)
-                M.JumpToLink(origin[1], origin[2], opts.file)
-            end } }
+            callbacks = {
+                {
+                    M.config.keymaps.link_backward,
+                    function(opts)
+                        M.JumpToLink(origin[1], origin[2], opts.render_info, true)
+                    end
+                },
+                {
+                    M.config.keymaps.set_as_root,
+                    function(opts)
+                        M.RenderGraph(json_obj, opts.editor_buf, key_set)
+                    end
+                }
+            }
         end
 
         right = EDGE.TOP_RIGHT
@@ -125,48 +154,52 @@ M.BuildBoxCap = function(top, max_len_left, first, origin)
 end
 
 M.IsExpanded = function(key_set, dict)
-    local key
-    if type(key_set) == "table" then
-        key = key_set[1]
-    else
-        key = key_set
+    if dict == nil then
+        dict = M.expanded
     end
 
-    local ex_dict = dict or M.expanded
-    local result = ex_dict[key]
+    for idx, key in pairs(key_set) do
+        if dict[key] == nil then
+            return nil
+        end
 
-    if type(result) == "table" then
-        return M.IsExpanded(key_set[2], result)
-    else
-        return result
-    end
-end
+        dict = dict[key]
 
-M.SetExpanded = function(key_set, dict, val)
-    local key
-    if type(key_set) == "table" then
-        key = key_set[1]
-    else
-        key = key_set
-    end
-
-    local ex_dict = dict or M.expanded
-    local result = ex_dict[key]
-
-    if type(result) == "table" then
-        M.SetExpanded(key_set[2], result, val)
-    else
-        ex_dict[key] = val
+        if idx == #key_set then
+            return dict[0]
+        end
     end
 end
 
-M.JumpToLink = function(layer, row, file)
-    local col = M.render_info[file].col_idxs[layer]
+M.SetExpanded = function(key_set, val, dict)
+    if dict == nil then
+        dict = M.expanded
+    end
+
+    for idx, key in pairs(key_set) do
+        if dict[key] == nil then
+            dict[key] = {}
+        end
+
+        dict = dict[key]
+
+        if idx == #key_set then
+            dict[0] = val
+        end
+    end
+end
+
+M.JumpToLink = function(layer, row, render_info, jump_to_word)
+    local col = render_info.col_idxs[layer]
     vim.api.nvim_win_set_cursor(0, { 2, col })
-    local virtcol = vim.fn.virtcol('.')
 
-    vim.api.nvim_win_set_cursor(0, { row + 1, 0 })
-    vim.cmd("normal! " .. (virtcol - 1) .. "zl")
+    if row ~= 1 then
+        vim.cmd("normal! " .. (row - 1) .. "j")
+    end
+
+    if jump_to_word then
+        vim.cmd("call search('\\S')")
+    end
 end
 
 M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
@@ -187,7 +220,14 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
     end
 
     layer.width = math.max(layer.width, max_len_left + max_len_right + 3)
-    text_lines[#text_lines + 1] = M.BuildBoxCap(true, max_len_left, layer_idx == 1, { layer_idx - 1, from_row })
+    text_lines[#text_lines + 1] = M.BuildBoxCap(
+        true,
+        max_len_left,
+        layer_idx == 1,
+        { layer_idx - 1, from_row },
+        json_obj,
+        key_set
+    )
 
     local line = 1
     for key, val in pairs(json_obj) do
@@ -202,10 +242,14 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                 ".",
                 EDGE.LEFT_AND_RIGHT,
                 {
-                    { M.config.keymaps.expand, function(opts)
-                        M.SetExpanded(key_set, nil, true)
-                        M.RenderGraph(opts.json_obj, opts.editor_buf, opts.file)
-                    end }
+                    {
+                        M.config.keymaps.expand,
+                        function(opts)
+                            vim.print(key_set)
+                            M.SetExpanded(key_set, true)
+                            M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
+                        end
+                    }
                 }
             }
             break
@@ -217,8 +261,9 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                 collapse_callback = {
                     M.config.keymaps.expand,
                     function(opts)
-                        M.SetExpanded(key_set, nil, false)
-                        M.RenderGraph(opts.json_obj, opts.editor_buf, opts.file)
+                        vim.print(key_set)
+                        M.SetExpanded(key_set, false)
+                        M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
                     end
                 }
             end
@@ -230,12 +275,20 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
 
             if right == "{}" or right == "[]" then
                 local from = layer.lines + #text_lines + 1
-                local to = M.TableObject(val, out_table, layer_idx + 1, { key_set, key }, from)
-                text_lines[#text_lines + 1] = { left, "·", right .. EDGE.CONNECTION, { { M.config.keymaps.link_forward, function(
-                    opts)
-                    M.JumpToLink(
-                        layer_idx + 1, to, opts.file)
-                end }, collapse_callback } }
+                local to = M.TableObject(val, out_table, layer_idx + 1, appended_table(key_set, key), from)
+                text_lines[#text_lines + 1] = {
+                    left, "·", right .. EDGE.CONNECTION,
+                    {
+                        {
+                            M.config.keymaps.link_forward,
+                            function(opts)
+                                M.JumpToLink(layer_idx + 1, to, opts.render_info, false)
+                            end
+                        },
+                        collapse_callback
+                    }
+                }
+
                 connections[#connections + 1] = {
                     from = from,
                     to = to
@@ -285,22 +338,6 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
         end
     end
 
-    local function insert_col_to_left_of(col)
-        grid_cols = grid_cols + 1
-        for i = 1, grid_height do
-            local row = grid[i]
-
-            local char = ({
-                [" "] = " ",
-                [LINE.UP_DOWN] = " ",
-                [LINE.TURN_SIDE_FU] = " ",
-                [LINE.TURN_SIDE_FD] = " ",
-            })[row[col]] or LINE.SIDE
-
-            table.insert(row, col, char)
-        end
-    end
-
     local up_cons = {}
     local down_cons = {}
     local flat_cons = {}
@@ -326,7 +363,7 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
         end
     end
 
-    for i = 1, #down_cons do
+    for i = #down_cons, 1, -1 do
         local con = down_cons[i]
         local row = con.from
         local col = 1
@@ -338,7 +375,9 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
             local new_row
             local new_col
 
-            if row < target and grid[row][col] ~= LINE.UP_DOWN and grid[row][col] ~= LINE.CROSS and grid[row][col] ~= LINE.TURN_DOWN then
+            if row < target
+                and grid[row + 1][col] == " "
+            then
                 new_row = row + 1
                 new_col = col
                 new_is_right = false
@@ -356,9 +395,6 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
                     char = LINE.SIDE
                 end
             elseif last_was_right and (not new_is_right) then
-                if grid[row][col] ~= " " then
-                    insert_col_to_left_of(col)
-                end
                 char = LINE.TURN_DOWN
             elseif (not last_was_right) and new_is_right then
                 char = LINE.TURN_SIDE_FD
@@ -377,7 +413,7 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
         end
     end
 
-    for i = #up_cons, 1, -1 do
+    for i = 1, #up_cons do
         local con = up_cons[i]
         local row = con.from
         local col = 1
@@ -390,7 +426,9 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
             local new_col
 
 
-            if row > target and grid[row][col] ~= LINE.UP_DOWN and grid[row][col] ~= LINE.CROSS and grid[row][col] ~= LINE.TURN_UP then
+            if row > target
+                and grid[row - 1][col] == " "
+            then
                 new_row = row - 1
                 new_col = col
                 new_is_right = false
@@ -408,9 +446,6 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
                     char = LINE.SIDE
                 end
             elseif last_was_right and (not new_is_right) then
-                if grid[row][col] ~= " " then
-                    insert_col_to_left_of(col)
-                end
                 char = LINE.TURN_UP
             elseif (not last_was_right) and new_is_right then
                 char = LINE.TURN_SIDE_FU
@@ -455,10 +490,10 @@ M.BuildConnections = function(output_table)
     return connections
 end
 
-M.RenderGraph = function(json_obj, editor_buf, file)
+M.RenderGraph = function(json_obj, editor_buf, key_set)
     local text_output_table = {}
-    local render_info = { line_callbacks = {} }
-    M.TableObject(json_obj, text_output_table, 1, file)
+    local render_info = { line_callbacks = {}, shown_obj = json_obj, shown_key_set = key_set }
+    M.TableObject(json_obj, text_output_table, 1, key_set)
     local connections = M.BuildConnections(text_output_table)
 
     local output_lines = {}
@@ -556,7 +591,7 @@ M.RenderGraph = function(json_obj, editor_buf, file)
 
     vim.api.nvim_buf_set_option(editor_buf, 'modifiable', false)
 
-    M.render_info[file] = render_info
+    M.render_info[editor_buf] = render_info
 end
 
 M.SplitView = function()
@@ -643,7 +678,7 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
     end
 
     local callback_keys = ""
-    for start, callback_set in pairs(M.render_info[file].line_callbacks[pos[1] - 1]) do
+    for start, callback_set in pairs(M.render_info[editor_buf].line_callbacks[pos[1] - 1]) do
         if pos[2] >= start then
             for _, callback in pairs(callback_set) do
                 if pos[2] < start + callback.limit then
@@ -656,7 +691,8 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
                             editor_buf = editor_buf,
                             json_obj = json_obj,
                             file = file,
-                            file_buf = file_buf
+                            file_buf = file_buf,
+                            render_info = M.render_info[editor_buf],
                         })
                     end, { buffer = true })
                 end
@@ -667,13 +703,16 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
     update_statusline(M.plugin_name .. " [" .. callback_keys .. "]")
 end
 
+M.CursorToRoot = function()
+    vim.api.nvim_win_set_cursor(0, { 3, 3 })
+end
+
 M.ShowJsonWindow = function(file_buf, json_obj, file)
     local editor_buf, update_statusline = M.SplitView();
     update_statusline("True")
     vim.api.nvim_win_set_buf(0, editor_buf)
-    M.RenderGraph(json_obj, editor_buf, file)
-    vim.api.nvim_win_set_cursor(0, { 3, 3 })
-
+    M.RenderGraph(json_obj, editor_buf, { editor_buf })
+    M.CursorToRoot()
 
     vim.api.nvim_create_autocmd({ "CursorMoved" }, {
         buffer = editor_buf,
