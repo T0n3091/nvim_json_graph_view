@@ -72,7 +72,7 @@ M.GetValAsString = function(val)
 end
 
 ---Gets the length of the string representation of
----a json value
+---a json value.
 ---@param val any
 ---@return integer
 M.GetLenOfValue = function(val)
@@ -93,13 +93,13 @@ M.GetLenOfValue = function(val)
     end
 end
 
----Builds the top or bottom of a graph unit
+---Builds the top or bottom of a graph unit.
 ---@param top boolean
 ---@param max_len_left integer
----@param first boolean
----@param origin Vec2
----@param json_obj table
----@param key_set any[]
+---@param first boolean | nil
+---@param origin Vec2 | nil
+---@param json_obj table | nil
+---@param key_set any[] | nil
 ---@return TextLine
 M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
     local left
@@ -115,7 +115,9 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                 function(opts)
                     M.RenderGraph(opts.json_obj, opts.editor_buf, { opts.editor_buf })
                     M.CursorToRoot()
-                end
+                end,
+                "View full graph",
+                1,
             } }
         else
             left = edges.edge.TOP_LEFT
@@ -123,15 +125,21 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                 {
                     M.config.keymaps.link_backward,
                     function(opts)
+                        ---@diagnostic disable-next-line: need-check-nil
                         M.JumpToLink(origin[1], origin[2], opts.render_info, true)
-                    end
+                    end,
+                    "Jump to parent unit",
+                    3,
                 },
                 {
                     M.config.keymaps.set_as_root,
                     function(opts)
+                        ---@diagnostic disable-next-line: param-type-mismatch
                         M.RenderGraph(json_obj, opts.editor_buf, key_set)
                         M.CursorToRoot()
-                    end
+                    end,
+                    "Set unit as root",
+                    1,
                 }
             }
         end
@@ -181,7 +189,7 @@ end
 ---or expanded false.
 ---@param key_set any[]
 ---@param val boolean
----@param dict table
+---@param dict table | nil
 M.SetExpanded = function(key_set, val, dict)
     if dict == nil then
         dict = M.expanded
@@ -200,7 +208,7 @@ M.SetExpanded = function(key_set, val, dict)
     end
 end
 
----Jumps the cursor to a graph location
+---Jumps the cursor to a graph location.
 ---@param layer integer
 ---@param row integer
 ---@param render_info table
@@ -272,7 +280,9 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                         function(opts)
                             M.SetExpanded(key_set, true)
                             M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
-                        end
+                        end,
+                        "Expand unit",
+                        4,
                     }
                 }
             }
@@ -287,7 +297,9 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                     function(opts)
                         M.SetExpanded(key_set, false)
                         M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
-                    end
+                    end,
+                    "Collapse unit",
+                    2,
                 }
             end
 
@@ -306,7 +318,9 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                             M.config.keymaps.link_forward,
                             function(opts)
                                 M.JumpToLink(layer_idx + 1, to, opts.render_info, false)
-                            end
+                            end,
+                            "Jump to linked unit",
+                            3,
                         },
                         collapse_callback
                     }
@@ -738,21 +752,27 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
     end
 
     local callback_keys = {}
+    local enter_map
+    local call_opts = {
+        editor_buf = editor_buf,
+        json_obj = json_obj,
+        file = file,
+        file_buf = file_buf,
+        render_info = M.render_info[editor_buf],
+    }
     for start, callback_set in pairs(M.render_info[editor_buf].line_callbacks[pos[1] - 1]) do
         if pos[2] >= start then
             for _, callback in pairs(callback_set) do
                 if pos[2] < start + callback.limit then
-                    local fn = function()
-                        callback[2]({
-                            editor_buf = editor_buf,
-                            json_obj = json_obj,
-                            file = file,
-                            file_buf = file_buf,
-                            render_info = M.render_info[editor_buf],
-                        })
+                    if enter_map == nil or enter_map[4] < callback[4] then
+                        enter_map = callback
                     end
 
-                    callback_keys[callback[1]] = fn
+                    local fn = function()
+                        callback[2](call_opts)
+                    end
+
+                    callback_keys[callback[1]] = { fn, callback[3] }
                     vim.keymap.set("n", callback[1], fn, { buffer = true })
                 end
             end
@@ -761,24 +781,10 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
 
     local statusline_text = M.plugin_name .. " (" .. M.config.keymaps.close_window .. "=Close Window)"
 
-    local enter_map
-    for _, k in pairs({
-        M.config.keymaps.expand,
-        M.config.keymaps.link_backward,
-        M.config.keymaps.link_forward,
-        M.config.keymaps.set_as_root,
-    }) do
-        for k2, callback in pairs(callback_keys) do
-            if k == k2 then
-                enter_map = { k2, callback }
-                goto after
-            end
-        end
-    end
-    ::after::
-
     if enter_map then
-        vim.keymap.set("n", M.config.keymaps.quick_action, enter_map[2], { buffer = true })
+        vim.keymap.set("n", M.config.keymaps.quick_action, function()
+            enter_map[2](call_opts)
+        end, { buffer = true })
         statusline_text = statusline_text .. " (" .. M.config.keymaps.quick_action .. "=" .. enter_map[1] .. ")"
     else
         vim.keymap.set("n", M.config.keymaps.quick_action, function()
@@ -786,15 +792,8 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
         end, { buffer = true })
     end
 
-    for k, _ in pairs(callback_keys) do
-        local help = ({
-            [M.config.keymaps.expand] = "Expand/Collapse Section",
-            [M.config.keymaps.link_forward] = "Jump to Linked Unit",
-            [M.config.keymaps.link_backward] = "Jump to Parent Unit",
-            [M.config.keymaps.set_as_root] = "Set Unit as Graph Root",
-        })[k]
-
-        statusline_text = statusline_text .. " (" .. k .. "=" .. help .. ")"
+    for k, h in pairs(callback_keys) do
+        statusline_text = statusline_text .. " (" .. k .. "=" .. h[2] .. ")"
     end
 
     update_statusline(statusline_text)
