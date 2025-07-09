@@ -61,6 +61,9 @@ return {
 
             -- quick_action = "<CR>",
             -- -- Aliased to first priority available keymap
+
+            -- close_window = "q"
+            -- -- Close the window
         -- }
     }
 }

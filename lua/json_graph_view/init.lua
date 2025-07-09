@@ -1,5 +1,5 @@
-local utils = require("lua.json_graph_view.utils")
-local edges = require("lua.json_graph_view.edges")
+local utils = require("json_graph_view.utils")
+local edges = require("json_graph_view.edges")
 
 local M = {
     expanded = {},
@@ -32,6 +32,9 @@ local M = {
 
             ---@type string
             quick_action = "<CR>",
+
+            ---@type string
+            close_window = "q"
         }
     },
     render_info = {},
@@ -694,6 +697,14 @@ M.SplitView = function()
         end
     })
 
+    vim.keymap.set(
+        "n",
+        M.config.keymaps.close_window,
+        "<CMD>q<CR>",
+        { buffer = true, noremap = true, silent = true }
+    )
+
+
     return editor_buf, update_statusline
 end
 
@@ -711,9 +722,11 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
     end
 
     for _, k in pairs(M.config.keymaps) do
-        vim.keymap.set("n", k, function()
-            vim.notify(k .. " is not valid at this location", "WARN")
-        end, { buffer = true })
+        if k ~= M.config.keymaps.close_window then
+            vim.keymap.set("n", k, function()
+                vim.notify(k .. " is not valid at this location", "WARN")
+            end, { buffer = true })
+        end
     end
 
     local callback_keys = {}
@@ -738,6 +751,8 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
         end
     end
 
+    local statusline_text = M.plugin_name .. " (" .. M.config.keymaps.close_window .. "=Close Window)"
+
     local enter_map
     for _, k in pairs({
         M.config.keymaps.expand,
@@ -754,20 +769,24 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
     end
     ::after::
 
-    local callback_keys_str = ""
-    for k, _ in pairs(callback_keys) do
-        callback_keys_str = callback_keys_str .. k
-    end
-
-    local statusline_text = M.plugin_name .. " [" .. callback_keys_str .. "]"
-
     if enter_map then
         vim.keymap.set("n", M.config.keymaps.quick_action, enter_map[2], { buffer = true })
-        statusline_text = statusline_text .. " " .. M.config.keymaps.quick_action .. "=" .. enter_map[1]
+        statusline_text = statusline_text .. " (" .. M.config.keymaps.quick_action .. "=" .. enter_map[1] .. ")"
     else
         vim.keymap.set("n", M.config.keymaps.quick_action, function()
             vim.notify(M.config.keymaps.quick_action .. " is not valid at this location", "WARN")
         end, { buffer = true })
+    end
+
+    for k, _ in pairs(callback_keys) do
+        local help = ({
+            [M.config.keymaps.expand] = "Expand/Collapse Section",
+            [M.config.keymaps.link_forward] = "Jump to Linked Unit",
+            [M.config.keymaps.link_backward] = "Jump to Parent Unit",
+            [M.config.keymaps.set_as_root] = "Set Unit as Graph Root",
+        })[k]
+
+        statusline_text = statusline_text .. " (" .. k .. "=" .. help .. ")"
     end
 
     update_statusline(statusline_text)
