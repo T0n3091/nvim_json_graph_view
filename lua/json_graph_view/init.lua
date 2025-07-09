@@ -648,6 +648,7 @@ M.SplitView = function()
     vim.api.nvim_win_set_buf(new_win, editor_buf)
     vim.api.nvim_win_set_option(new_win, 'number', false)
     vim.api.nvim_win_set_option(new_win, 'relativenumber', false)
+    vim.api.nvim_buf_set_option(editor_buf, "filetype", M.plugin_name)
 
     -- Define highlight group for the statusline
     vim.api.nvim_set_hl(0, "JsonViewStatusline", { bg = "#1e1e2e", fg = "#ffffff", bold = true })
