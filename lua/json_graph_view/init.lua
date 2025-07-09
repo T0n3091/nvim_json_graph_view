@@ -1,17 +1,36 @@
----@diagnostic disable: undefined-global
+local utils = require("lua.json_graph_view.utils")
+local edges = require("lua.json_graph_view.edges")
 
 local M = {
     expanded = {},
     config = {
+        ---@type boolean
         accept_all_files = true,
+
+        ---@type integer
         max_lines = 5,
+
+        ---@type boolean
         round_units = true,
+
+        ---@type boolean
         round_connections = true,
+
+        ---@type table
         keymaps = {
+            ---@type string
             expand = "E",
+
+            ---@type string
             link_forward = "L",
+
+            ---@type string
             link_backward = "B",
+
+            ---@type string
             set_as_root = "R",
+
+            ---@type string
             quick_action = "<CR>",
         }
     },
@@ -19,89 +38,20 @@ local M = {
     plugin_name = "JsonGraphView"
 }
 
-local ROUND_EDGE = {
-    TOP_LEFT = "┬",
-    TOP_LEFT_ROOT = "╭",
-    TOP_RIGHT = "╮",
-    BOTTOM_LEFT = "╰",
-    BOTTOM_RIGHT = "╯",
-    TOP_AND_BOTTOM = "─",
-    LEFT_AND_RIGHT = "│",
-    TOP_SPLITTER = "┬",
-    BOTTOM_SPLITTER = "┴",
-    CONNECTION = "├"
-}
+---@alias Vec2 { [1]: integer, [2]: integer }
+---@alias Callback {[1]: string, [2]: function}
+---@alias TextLine { [1]: string, [2]: string, [3]: string, [4]: Callback[]}
 
-local HARD_EDGE = {
-    TOP_LEFT = "┬",
-    TOP_LEFT_ROOT = "┌",
-    TOP_RIGHT = "┐",
-    BOTTOM_LEFT = "└",
-    BOTTOM_RIGHT = "┘",
-    TOP_AND_BOTTOM = "─",
-    LEFT_AND_RIGHT = "│",
-    TOP_SPLITTER = "┬",
-    BOTTOM_SPLITTER = "┴",
-    CONNECTION = "├"
-}
-
-local EDGE = HARD_EDGE
-
-local ROUND_LINE = {
-    TURN_SIDE_FU = "╭",
-    TURN_DOWN = "╮",
-    TURN_SIDE_FD = "╰",
-    TURN_UP = "╯",
-    SIDE = "─",
-    CROSS = "┼",
-    UP_DOWN = "│",
-}
-
-local HARD_LINE = {
-    TURN_SIDE_FU = "┌",
-    TURN_DOWN = "┐",
-    TURN_SIDE_FD = "└",
-    TURN_UP = "┘",
-    SIDE = "─",
-    CROSS = "┼",
-    UP_DOWN = "│",
-}
-
-local LINE = HARD_LINE
-
-local function utf8len(str)
-    local _, count = string.gsub(str, "[^\128-\191]", "")
-    return count
-end
-
-local function escape_string(str)
-    return str
-        :gsub("\\", "\\\\")
-        :gsub("\n", "\\n")
-        :gsub("\t", "\\t")
-        :gsub("\r", "\\r")
-        :gsub("\"", "\\\"")
-end
-
-local function appended_table(tbl, add)
-    local new = {}
-
-    for k, v in pairs(tbl) do
-        new[k] = v
-    end
-
-    new[#new + 1] = add
-
-    return new
-end
-
+---Converts json object to its string representation
+---@param val any
+---@return string
 M.GetValAsString = function(val)
     if val == vim.NIL then
         return "null"
     elseif val == vim.empty_dict() then
         return "{}"
     elseif type(val) == "string" then
-        return '"' .. escape_string(val) .. '"'
+        return '"' .. utils.escape_string(val) .. '"'
     elseif type(val) == "number" then
         return tostring(val)
     elseif type(val) == "boolean" then
@@ -115,11 +65,15 @@ M.GetValAsString = function(val)
     end
 end
 
+---Gets the length of the string representation of
+---a json value
+---@param val any
+---@return integer
 M.GetLenOfValue = function(val)
     if val == vim.NIL then
         return 4
     elseif type(val) == "string" then
-        return #val + 2
+        return utils.utf8len(val) + 2
     elseif type(val) == "number" then
         return #tostring(val)
     elseif type(val) == "boolean" then
@@ -133,6 +87,14 @@ M.GetLenOfValue = function(val)
     end
 end
 
+---Builds the top or bottom of a graph unit
+---@param top boolean
+---@param max_len_left integer
+---@param first boolean
+---@param origin Vec2
+---@param json_obj table
+---@param key_set any[]
+---@return TextLine
 M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
     local left
     local right
@@ -141,7 +103,7 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
 
     if top then
         if first then
-            left = EDGE.TOP_LEFT_ROOT
+            left = edges.edge.TOP_LEFT_ROOT
             callbacks = { {
                 M.config.keymaps.link_backward,
                 function(opts)
@@ -150,7 +112,7 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                 end
             } }
         else
-            left = EDGE.TOP_LEFT
+            left = edges.edge.TOP_LEFT
             callbacks = {
                 {
                     M.config.keymaps.link_backward,
@@ -168,22 +130,27 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
             }
         end
 
-        right = EDGE.TOP_RIGHT
-        splitter = EDGE.TOP_SPLITTER
+        right = edges.edge.TOP_RIGHT
+        splitter = edges.edge.TOP_SPLITTER
     else
-        left = EDGE.BOTTOM_LEFT
-        right = EDGE.BOTTOM_RIGHT
-        splitter = EDGE.BOTTOM_SPLITTER
+        left = edges.edge.BOTTOM_LEFT
+        right = edges.edge.BOTTOM_RIGHT
+        splitter = edges.edge.BOTTOM_SPLITTER
     end
 
     return {
-        left .. string.rep(EDGE.TOP_AND_BOTTOM, max_len_left) .. splitter,
-        EDGE.TOP_AND_BOTTOM,
+        left .. string.rep(edges.edge.TOP_AND_BOTTOM, max_len_left) .. splitter,
+        edges.edge.TOP_AND_BOTTOM,
         right,
         callbacks
     }
 end
 
+---Determines if the unit specified by the key_set
+---is expanded or not.
+---@param key_set any[]
+---@param dict table | nil
+---@return boolean | nil
 M.IsExpanded = function(key_set, dict)
     if dict == nil then
         dict = M.expanded
@@ -200,8 +167,15 @@ M.IsExpanded = function(key_set, dict)
             return dict[0]
         end
     end
+
+    return false
 end
 
+---Register the unit specified by the key_set as expanded true
+---or expanded false.
+---@param key_set any[]
+---@param val boolean
+---@param dict table
 M.SetExpanded = function(key_set, val, dict)
     if dict == nil then
         dict = M.expanded
@@ -220,6 +194,11 @@ M.SetExpanded = function(key_set, val, dict)
     end
 end
 
+---Jumps the cursor to a graph location
+---@param layer integer
+---@param row integer
+---@param render_info table
+---@param jump_to_word boolean
 M.JumpToLink = function(layer, row, render_info, jump_to_word)
     local col = render_info.col_idxs[layer]
     vim.api.nvim_win_set_cursor(0, { 2, col })
@@ -233,6 +212,15 @@ M.JumpToLink = function(layer, row, render_info, jump_to_word)
     end
 end
 
+---Creates a text table representation of an object
+---with callbacks and returns the top line number.
+---OUTPUT WILL BE SENT TO OUT TABLE
+---@param json_obj table
+---@param out_table table
+---@param layer_idx integer
+---@param key_set any[]
+---@param from_row integer | nil
+---@return integer
 M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
     if out_table[layer_idx] == nil then
         out_table[layer_idx] = { lines = 0, width = 0, boxes = {} }
@@ -262,7 +250,7 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
 
     local line = 1
     for key, val in pairs(json_obj) do
-        local left_edge = EDGE.LEFT_AND_RIGHT
+        local left_edge = edges.edge.LEFT_AND_RIGHT
         if line == M.config.max_lines + 1 then
             left_edge = "╪"
         end
@@ -271,7 +259,7 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
             text_lines[#text_lines + 1] = {
                 left_edge,
                 ".",
-                EDGE.LEFT_AND_RIGHT,
+                edges.edge.LEFT_AND_RIGHT,
                 {
                     {
                         M.config.keymaps.expand,
@@ -299,14 +287,14 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
 
             local string_key = tostring(key)
             local left = left_edge ..
-                string.rep(" ", max_len_left - #string_key) .. string_key .. EDGE.LEFT_AND_RIGHT
+                string.rep(" ", max_len_left - #string_key) .. string_key .. edges.edge.LEFT_AND_RIGHT
             local right = M.GetValAsString(val)
 
             if right == "{}" or right == "[]" then
                 local from = layer.lines + #text_lines + 1
-                local to = M.TableObject(val, out_table, layer_idx + 1, appended_table(key_set, key), from)
+                local to = M.TableObject(val, out_table, layer_idx + 1, utils.appended_table(key_set, key), from)
                 text_lines[#text_lines + 1] = {
-                    left, "·", right .. EDGE.CONNECTION,
+                    left, "·", right .. edges.edge.CONNECTION,
                     {
                         {
                             M.config.keymaps.link_forward,
@@ -323,7 +311,7 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                     to = to
                 }
             else
-                text_lines[#text_lines + 1] = { left, "·", right .. EDGE.LEFT_AND_RIGHT, { collapse_callback } }
+                text_lines[#text_lines + 1] = { left, "·", right .. edges.edge.LEFT_AND_RIGHT, { collapse_callback } }
             end
         end
     end
@@ -335,6 +323,7 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
     return layer.boxes[#layer.boxes].top_line
 end
 
+---Apply highlighting to current buffer
 M.ApplyHighlighting = function()
     vim.cmd([[highlight MyOperators guifg=#009900]])
 
@@ -352,6 +341,10 @@ M.ApplyHighlighting = function()
     vim.cmd("syn match Number \"[-+]\\=Infinity\\|NaN\"")
 end
 
+---Build connections for the given layer
+---@param connections {from: integer, to:integer}[]
+---@param grid_height integer
+---@return TextLine[]
 M.BuildConnectionsForLayer = function(connections, grid_height)
     local grid = {}
     local grid_cols = 0
@@ -387,7 +380,7 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
     for _, con in pairs(flat_cons) do
         local col = 1
         while col <= grid_cols do
-            grid[con.from][col] = LINE.SIDE
+            grid[con.from][col] = edges.line.SIDE
             col = col + 1
         end
     end
@@ -418,20 +411,20 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
 
             local char
             if last_was_right and new_is_right then
-                if grid[row][col] == LINE.UP_DOWN then
-                    char = LINE.CROSS
+                if grid[row][col] == edges.line.UP_DOWN then
+                    char = edges.line.CROSS
                 else
-                    char = LINE.SIDE
+                    char = edges.line.SIDE
                 end
             elseif last_was_right and (not new_is_right) then
-                char = LINE.TURN_DOWN
+                char = edges.line.TURN_DOWN
             elseif (not last_was_right) and new_is_right then
-                char = LINE.TURN_SIDE_FD
+                char = edges.line.TURN_SIDE_FD
             else
-                if grid[row][col] == LINE.SIDE then
-                    char = LINE.CROSS
+                if grid[row][col] == edges.line.SIDE then
+                    char = edges.line.CROSS
                 else
-                    char = LINE.UP_DOWN
+                    char = edges.line.UP_DOWN
                 end
             end
 
@@ -469,20 +462,20 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
 
             local char
             if last_was_right and new_is_right then
-                if grid[row][col] == LINE.UP_DOWN then
-                    char = LINE.CROSS
+                if grid[row][col] == edges.line.UP_DOWN then
+                    char = edges.line.CROSS
                 else
-                    char = LINE.SIDE
+                    char = edges.line.SIDE
                 end
             elseif last_was_right and (not new_is_right) then
-                char = LINE.TURN_UP
+                char = edges.line.TURN_UP
             elseif (not last_was_right) and new_is_right then
-                char = LINE.TURN_SIDE_FU
+                char = edges.line.TURN_SIDE_FU
             else
-                if grid[row][col] == LINE.SIDE then
-                    char = LINE.CROSS
+                if grid[row][col] == edges.line.SIDE then
+                    char = edges.line.CROSS
                 else
-                    char = LINE.UP_DOWN
+                    char = edges.line.UP_DOWN
                 end
             end
 
@@ -497,6 +490,9 @@ M.BuildConnectionsForLayer = function(connections, grid_height)
     return grid
 end
 
+---Builds the connections for a text graph
+---@param output_table table
+---@return table
 M.BuildConnections = function(output_table)
     local connections = {}
 
@@ -519,10 +515,14 @@ M.BuildConnections = function(output_table)
     return connections
 end
 
+---Renders the json_obj to the editor buf
+---@param json_obj table
+---@param editor_buf integer
+---@param key_set any[]
 M.RenderGraph = function(json_obj, editor_buf, key_set)
     local text_output_table = {}
     local render_info = { line_callbacks = {}, shown_obj = json_obj, shown_key_set = key_set }
-    M.TableObject(json_obj, text_output_table, 1, key_set)
+    M.TableObject(json_obj, text_output_table, 1, key_set, nil)
     local connections = M.BuildConnections(text_output_table)
 
     local output_lines = {}
@@ -546,7 +546,7 @@ M.RenderGraph = function(json_obj, editor_buf, key_set)
                         local left, fill, right = text_line[1], text_line[2], text_line[3]
 
                         local conjoined = left .. right
-                        local utf8len_ = utf8len(conjoined)
+                        local utf8len_ = utils.utf8len(conjoined)
 
                         if text_line[4] then
                             local len = string.len(conjoined)
@@ -623,6 +623,10 @@ M.RenderGraph = function(json_obj, editor_buf, key_set)
     M.render_info[editor_buf] = render_info
 end
 
+---Creates a window split. Returns the buffer for the window
+---and a callback to update the status line.
+---@return integer
+---@return function
 M.SplitView = function()
     local win = vim.api.nvim_get_current_win()
     local total_width = vim.api.nvim_win_get_width(win)
@@ -693,6 +697,12 @@ M.SplitView = function()
     return editor_buf, update_statusline
 end
 
+---Cursor moved autocommand
+---@param editor_buf integer
+---@param json_obj table
+---@param file string
+---@param file_buf integer
+---@param update_statusline function
 M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline)
     local pos = vim.api.nvim_win_get_cursor(0)
     if pos[1] == 1 then
@@ -763,10 +773,15 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
     update_statusline(statusline_text)
 end
 
+---Moves the cursor to the first unit
 M.CursorToRoot = function()
     vim.api.nvim_win_set_cursor(0, { 3, 3 })
 end
 
+---Shows the JsonGraphView window
+---@param file_buf integer
+---@param json_obj table
+---@param file string
 M.ShowJsonWindow = function(file_buf, json_obj, file)
     local editor_buf, update_statusline = M.SplitView();
     vim.api.nvim_win_set_buf(0, editor_buf)
@@ -782,6 +797,8 @@ M.ShowJsonWindow = function(file_buf, json_obj, file)
     vim.notify(M.plugin_name .. " View Opened")
 end
 
+---Opens the JsonGraphView on the specified buffer
+---@param bufn integer
 M.OpenJsonViewOnBuf = function(bufn)
     local lines = vim.api.nvim_buf_get_lines(bufn, 0, -1, false)
     local json_text = table.concat(lines, "")
@@ -798,6 +815,7 @@ M.OpenJsonViewOnBuf = function(bufn)
     end
 end
 
+---Opens the JsonGraphView on the current buffer
 M.OpenJsonView = function()
     if vim.bo.filetype == "json" or M.config.accept_all_files then
         local bufn = vim.api.nvim_buf_get_number(0)
@@ -809,33 +827,21 @@ end
 
 vim.api.nvim_create_user_command(M.plugin_name, M.OpenJsonView, {})
 
-local function update_table(with, to)
-    for k, v in pairs(with) do
-        if type(v) == "table" then
-            if type(to[k]) == "table" then
-                update_table(v, to[k])
-            else
-                to[k] = v
-            end
-        else
-            to[k] = v
-        end
-    end
-end
-
+---Set up the plugin
+---@param opts table
 M.setup = function(opts)
-    update_table(opts, M.config)
+    utils.update_table(opts, M.config)
 
     if M.config.round_connections then
-        LINE = ROUND_LINE
+        edges.line = edges.ROUND_LINE
     else
-        LINE = HARD_LINE
+        edges.line = edges.HARD_LINE
     end
 
     if M.config.round_units then
-        EDGE = ROUND_EDGE
+        edges.edge = edges.ROUND_EDGE
     else
-        EDGE = HARD_EDGE
+        edges.edge = edges.HARD_EDGE
     end
 end
 
