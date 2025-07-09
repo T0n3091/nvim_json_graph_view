@@ -46,6 +46,9 @@ return {
         -- round_connections = true,
         -- -- Set the connection style to round
 
+        -- disable_line_wrap = true,
+        -- -- Disable line wrapping for the graph buffer
+
         -- keymaps = {
             -- expand = "E",
             -- -- Expanding collapsed areas

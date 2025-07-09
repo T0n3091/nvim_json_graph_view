@@ -16,6 +16,9 @@ local M = {
         ---@type boolean
         round_connections = true,
 
+        ---@type boolean
+        disable_line_wrap = true,
+
         ---@type table
         keymaps = {
             ---@type string
@@ -649,6 +652,10 @@ M.SplitView = function()
     vim.api.nvim_win_set_option(new_win, 'number', false)
     vim.api.nvim_win_set_option(new_win, 'relativenumber', false)
     vim.api.nvim_buf_set_option(editor_buf, "filetype", M.plugin_name)
+
+    if M.config.disable_line_wrap then
+        vim.api.nvim_buf_set_option(editor_buf, "wrap", false)
+    end
 
     -- Define highlight group for the statusline
     vim.api.nvim_set_hl(0, "JsonViewStatusline", { bg = "#1e1e2e", fg = "#ffffff", bold = true })
