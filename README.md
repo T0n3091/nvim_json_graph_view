@@ -49,9 +49,22 @@ return {
         -- disable_line_wrap = true,
         -- -- Disable line wrapping for the graph buffer
 
+        -- keymap_priorities = {
+            -- expand = 4,
+            -- collapse = 2,
+            -- link_forward = 3,
+            -- link_backward = 3,
+            -- set_as_root = 1,
+        -- },
+        -- -- Set the priority of keymaps for the quick
+        -- --   action keymap.
+
         -- keymaps = {
             -- expand = "E",
             -- -- Expanding collapsed areas
+
+            -- collapse = "E",
+            -- -- Collapse expanded areas
 
             -- link_forward = "L",
             -- -- Jump to linked unit

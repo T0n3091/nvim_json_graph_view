@@ -20,9 +20,30 @@ local M = {
         disable_line_wrap = true,
 
         ---@type table
+        keymap_priorities = {
+            ---@type integer
+            expand = 4,
+
+            ---@type integer
+            link_forward = 3,
+
+            ---@type integer
+            link_backward = 3,
+
+            ---@type integer
+            collapse = 2,
+
+            ---@type integer
+            set_as_root = 1,
+        },
+
+        ---@type table
         keymaps = {
             ---@type string
             expand = "E",
+
+            ---@type string
+            collapse = "E",
 
             ---@type string
             link_forward = "L",
@@ -117,7 +138,7 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                     M.CursorToRoot()
                 end,
                 "View full graph",
-                1,
+                M.config.keymap_priorities.link_backward,
             } }
         else
             left = edges.edge.TOP_LEFT
@@ -129,7 +150,7 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                         M.JumpToLink(origin[1], origin[2], opts.render_info, true)
                     end,
                     "Jump to parent unit",
-                    3,
+                    M.config.keymap_priorities.link_backward,
                 },
                 {
                     M.config.keymaps.set_as_root,
@@ -139,7 +160,7 @@ M.BuildBoxCap = function(top, max_len_left, first, origin, json_obj, key_set)
                         M.CursorToRoot()
                     end,
                     "Set unit as root",
-                    1,
+                    M.config.keymap_priorities.set_as_root,
                 }
             }
         end
@@ -282,7 +303,7 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                             M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
                         end,
                         "Expand unit",
-                        4,
+                        M.config.keymap_priorities.expand,
                     }
                 }
             }
@@ -293,13 +314,13 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
             local collapse_callback
             if line > M.config.max_lines + 1 then
                 collapse_callback = {
-                    M.config.keymaps.expand,
+                    M.config.keymaps.collapse,
                     function(opts)
                         M.SetExpanded(key_set, false)
                         M.RenderGraph(opts.render_info.shown_obj, opts.editor_buf, opts.render_info.shown_key_set)
                     end,
                     "Collapse unit",
-                    2,
+                    M.config.keymap_priorities.collapse,
                 }
             end
 
@@ -320,7 +341,7 @@ M.TableObject = function(json_obj, out_table, layer_idx, key_set, from_row)
                                 M.JumpToLink(layer_idx + 1, to, opts.render_info, false)
                             end,
                             "Jump to linked unit",
-                            3,
+                            M.config.keymap_priorities.link_forward,
                         },
                         collapse_callback
                     }
@@ -760,6 +781,7 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
         file_buf = file_buf,
         render_info = M.render_info[editor_buf],
     }
+
     for start, callback_set in pairs(M.render_info[editor_buf].line_callbacks[pos[1] - 1]) do
         if pos[2] >= start then
             for _, callback in pairs(callback_set) do
@@ -772,14 +794,16 @@ M.CursorMoved = function(editor_buf, json_obj, file, file_buf, update_statusline
                         callback[2](call_opts)
                     end
 
-                    callback_keys[callback[1]] = { fn, callback[3] }
+                    callback_keys[callback[1]] = { fn, callback[3], callback[4] }
                     vim.keymap.set("n", callback[1], fn, { buffer = true })
                 end
             end
         end
     end
 
-    local statusline_text = M.plugin_name .. " (" .. M.config.keymaps.close_window .. "=Close Window)"
+    table.sort(callback_keys, function(a, b) return a[3] >= b[3] end)
+
+    local statusline_text = " (" .. M.config.keymaps.close_window .. "=Close Window)"
 
     if enter_map then
         vim.keymap.set("n", M.config.keymaps.quick_action, function()
